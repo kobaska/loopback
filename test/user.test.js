@@ -468,6 +468,36 @@ describe('User', function() {
         done();
       });
     });
+
+    it('Should be able to use query filters (email case-sensitivity off)', function(done) {
+      User.settings.caseSensitiveEmail = false;
+      var insensitiveUser = { email: 'insensitive@example.com', password: 'abc' };
+      User.create(insensitiveUser, function(err, user) {
+        User.find({ where: { email:
+          { inq: [insensitiveUser.email] },
+        }}, function(err, result) {
+          if (err) done(err);
+          assert(result[0], 'The query did not find the user');
+          assert.equal(result[0].email, insensitiveUser.email);
+          done();
+        });
+      });
+    });
+
+    it('Should be able to use query filters (email case-sensitivity on)', function(done) {
+      User.settings.caseSensitiveEmail = true;
+      var sensitiveUser = { email: 'senSiTive@example.com', password: 'abc' };
+      User.create(sensitiveUser, function(err, user) {
+        User.find({ where: { email:
+          { inq: [sensitiveUser.email] },
+        }}, function(err, result) {
+          if (err) done(err);
+          assert(result[0], 'The query did not find the user');
+          assert.equal(result[0].email, sensitiveUser.email);
+          done();
+        });
+      });
+    });
   });
 
   describe('User.login', function() {
@@ -2156,6 +2186,70 @@ describe('User', function() {
         },
       ], done);
     });
+  });
+
+  describe('Verification after updating email', function() {
+    var NEW_EMAIL = 'updated@example.com';
+    var userInstance;
+
+    beforeEach(createOriginalUser);
+
+    it('sets verification to false after email update if verification is required',
+    function(done) {
+      User.settings.emailVerificationRequired = true;
+      async.series([
+        function updateUser(next) {
+          userInstance.updateAttribute('email', NEW_EMAIL, function(err, info) {
+            if (err) return next(err);
+            assert.equal(info.email, NEW_EMAIL);
+            next();
+          });
+        },
+        function findUser(next) {
+          User.findById(userInstance.id, function(err, info) {
+            if (err) return next(err);
+            assert.equal(info.email, NEW_EMAIL);
+            assert.equal(info.emailVerified, false);
+            next();
+          });
+        },
+      ], done);
+    });
+
+    it('leaves verification as is after email update if verification is not required',
+    function(done) {
+      User.settings.emailVerificationRequired = false;
+      async.series([
+        function updateUser(next) {
+          userInstance.updateAttribute('email', NEW_EMAIL, function(err, info) {
+            if (err) return next(err);
+            assert.equal(info.email, NEW_EMAIL);
+            next();
+          });
+        },
+        function findUser(next) {
+          User.findById(userInstance.id, function(err, info) {
+            if (err) return next(err);
+            assert.equal(info.email, NEW_EMAIL);
+            assert.equal(info.emailVerified, true);
+            next();
+          });
+        },
+      ], done);
+    });
+
+    function createOriginalUser(done) {
+      var userData = {
+        email: 'original@example.com',
+        password: 'bar',
+        emailVerified: true,
+      };
+      User.create(userData, function(err, instance) {
+        if (err) return done(err);
+        userInstance = instance;
+        done();
+      });
+    }
   });
 
   describe('password reset with/without email verification', function() {
