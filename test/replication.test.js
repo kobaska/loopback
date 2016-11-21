@@ -1555,7 +1555,6 @@ describe('Replication / Change APIs', function() {
         } else {
           syncPropertyExists = false;
         }
-
         next();
       });
     });
@@ -1585,14 +1584,15 @@ describe('Replication / Change APIs', function() {
         function(data, callback) {
           updates[0].change = data;
           OptionsSourceModel.bulkUpdate(updates, options, callback);
+        }],
+        function(err, result) {
+          if (err) return done(err);
+
+          expect(syncPropertyExists).to.eql(true);
+
+          done();
         }
-      ], function(err, result) {
-        if (err) return done(err);
-
-        expect(syncPropertyExists).to.eql(true);
-
-        done();
-      });
+      );
     });
   });
 
@@ -1601,9 +1601,9 @@ describe('Replication / Change APIs', function() {
       var testData = {name: 'Janie', surname: 'Doe'};
       var updates = [
         {
-          data: null,
-          change: null,
-          type: 'create'
+        data: null,
+        change: null,
+        type: 'create'
         }
       ];
 
@@ -1619,10 +1619,11 @@ describe('Replication / Change APIs', function() {
           updates[0].change = data;
           SourceModel.bulkUpdate(updates, callback);
         }
-      ], function(err, result) {
-        if (err) return done(err);
-        done();
-      });
+        ], function(err, result) {
+          if (err) return done(err);
+          done();
+        }
+      );
     });
   });
 
