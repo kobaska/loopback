@@ -717,7 +717,7 @@ module.exports = function(Change) {
     var lastArg = arguments[arguments.length - 1];
 
     if (typeof lastArg === 'function' && arguments.length > 1) {
-      callback = lastArg;
+      cb = lastArg;
     }
 
     if (typeof options === 'function') {
