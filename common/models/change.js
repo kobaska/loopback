@@ -709,18 +709,13 @@ module.exports = function(Change) {
   /**
    * Resolve the conflict using the instance data in the target model.
    *
-   * @callback {Function} callback
-   * @param {Error} err
+   * @param {Object} [options] An optional options object to pass to underlying data-access calls.
+   * @param {Function} cb Callback function.
    */
   Conflict.prototype.resolveUsingTarget = function(options, cb) {
 
-    var lastArg = arguments[arguments.length - 1];
-
-    if (typeof lastArg === 'function' && arguments.length > 1) {
-      cb = lastArg;
-    }
-
     if (typeof options === 'function') {
+      cb = options;
       options = {};
     }
 
@@ -767,8 +762,8 @@ module.exports = function(Change) {
    *
    * @param {Object} data The set of changes to apply on the model
    * instance. Use `null` value to delete the source instance instead.
-   * @callback {Function} callback
-   * @param {Error} err
+   * @param {Object} [options] An optional options object to pass to underlying data-access calls.
+   * @param {Function} cb Callback function.
    */
 
   Conflict.prototype.resolveManually = function(data, options, cb) {
