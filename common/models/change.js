@@ -712,7 +712,20 @@ module.exports = function(Change) {
    * @callback {Function} callback
    * @param {Error} err
    */
-  Conflict.prototype.resolveUsingTarget = function(cb) {
+  Conflict.prototype.resolveUsingTarget = function(options, cb) {
+
+    var lastArg = arguments[arguments.length - 1];
+
+    if (typeof lastArg === 'function' && arguments.length > 1) {
+      callback = lastArg;
+    }
+
+    if (typeof options === 'function') {
+      options = {};
+    }
+
+    options = options || {};
+
     var conflict = this;
 
     conflict.models(function(err, source, target) {
@@ -723,7 +736,7 @@ module.exports = function(Change) {
       var inst = new conflict.SourceModel(
         target.toObject(),
         { persisted: true });
-      inst.save(done);
+      inst.save(options, done);
     });
 
     function done(err) {
@@ -758,8 +771,21 @@ module.exports = function(Change) {
    * @param {Error} err
    */
 
-  Conflict.prototype.resolveManually = function(data, cb) {
+  Conflict.prototype.resolveManually = function(data, options, cb) {
     var conflict = this;
+
+    var lastArg = arguments[arguments.length - 1];
+
+    if (typeof lastArg === 'function' && arguments.length > 1) {
+      cb = lastArg;
+    }
+
+    if (typeof options === 'function') {
+      options = {};
+    }
+
+    options = options || {};
+
     if (!data) {
       return conflict.SourceModel.deleteById(conflict.modelId, done);
     }
@@ -768,7 +794,7 @@ module.exports = function(Change) {
       if (err) return done(err);
       var inst = source || new conflict.SourceModel(target);
       inst.setAttributes(data);
-      inst.save(function(err) {
+      inst.save(options, function(err) {
         if (err) return done(err);
         conflict.resolve(done);
       });
