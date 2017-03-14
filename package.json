@@ -52,7 +52,7 @@
     "serve-favicon": "^2.2.0",
     "stable": "^0.1.5",
     "strong-globalize": "^2.6.2",
-    "strong-remoting": "git+https://github.com/strongloop/strong-remoting.git#2.x",
+    "strong-remoting": "git+https://github.com/agriwebb/strong-remoting.git#agriwebb-merge",
     "uid2": "0.0.3",
     "underscore.string": "^3.0.3"
   },
