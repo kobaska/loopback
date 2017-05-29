@@ -22,8 +22,7 @@
       "type": "string"
     },
     "tenant": {
-      "type": "string",
-      "default": null
+      "type": "string"
     }
   }
 }

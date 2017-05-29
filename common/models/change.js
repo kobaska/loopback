@@ -125,6 +125,104 @@ module.exports = function(Change) {
   };
 
   /**
+   * Track the recent change of the given instance.
+   *
+   * @param  {String}   modelName
+   * @param  {Object}    instance
+   * @param  {Object}    ctx
+   * @callback {Function} callback
+   * @param {Error} err
+   * @param {Array} changes Changes that were tracked
+   */
+  Change.rectifyModelChange = function(modelName, instance, ctx, callback) {
+    var Change = this;
+    var errors = [];
+
+    callback = callback || utils.createPromiseCallback();
+
+    if (ctx) {
+      debug("rectifyModelChange new change", ctx.newInstance);
+    }
+
+    if (ctx.isNewInstance) {
+      var id = this.idForModel(modelName, instance.id);
+
+      // Get revision for new item
+      var rev = Change.revisionForInst(instance);
+
+      // Get tenant
+      var model = Change.registry.findModel(modelName);
+      var tenant = getTenant(model, instance);
+
+      var ch = new Change({
+        id: id,
+        modelName: modelName,
+        modelId: instance.id,
+        rev: rev,
+        prev: null,
+        tenant: tenant,
+        checkpoint: Number.MAX_SAFE_INTEGER
+      });
+
+      ch.debug('creating new change record');
+
+      Change.create(ch, next);
+
+      // Get the checkpoint
+      // Change.getCheckpointModel().current(
+      //   function(err, checkpoint) {
+      //     var ch = new Change({
+      //       id: id,
+      //       modelName: modelName,
+      //       modelId: instance.id,
+      //       rev: rev,
+      //       prev: null,
+      //       tenant: tenant,
+      //       checkpoint: Number.MAX_SAFE_INTEGER,
+      //     });
+      //
+      //     ch.debug('creating new change record');
+      //
+      //     Change.create(ch, next);
+      //   }
+      // );
+    } else {
+      Change.findOrCreateChange(modelName, instance.id, function(err, change) {
+        if (err) {
+          return next(err);
+        }
+        change.rectify(ctx, next);
+      });
+    }
+
+    function next(err) {
+      if (err) {
+        err.modelName = modelName;
+        err.modelId = id;
+        errors.push(err);
+      }
+      callback();
+    }
+
+    function getTenant(model, inst) {
+      var tenant = null;
+      var tenantProperty;
+
+      if (model && model.settings && model.settings.tenantProperty) {
+        tenantProperty = model.settings.tenantProperty;
+      }
+
+      if (tenantProperty && inst && inst[tenantProperty]) {
+        tenant = inst[tenantProperty];
+      }
+
+      return tenant;
+    }
+
+    return callback.promise;
+  };
+
+  /**
    * Get an identifier for a given model.
    *
    * @param  {String} modelName
@@ -154,7 +252,10 @@ module.exports = function(Change) {
     var Change = this;
 
     this.findById(id, function(err, change) {
-      if (err) return callback(err);
+      if (err) {
+        return callback(err);
+      }
+
       if (change) {
         callback(null, change);
       } else {
@@ -164,7 +265,7 @@ module.exports = function(Change) {
           modelId: modelId
         });
         ch.debug('creating change');
-        Change.updateOrCreate(ch, callback);
+        Change.create(ch, callback);
       }
     });
     return callback.promise;
@@ -177,25 +278,48 @@ module.exports = function(Change) {
    * @param {Error} err
    * @param {Change} change
    */
-
-  Change.prototype.rectify = function(cb) {
+  Change.prototype.rectify = function(ctx, cb) {
     var change = this;
     var currentRev = this.rev;
 
     change.debug('rectify change');
+    // if only one argument was provided, then set that as the callback
+    if (typeof ctx === 'function') {
+      cb = ctx;
+      ctx = null;
+    }
 
     cb = cb || utils.createPromiseCallback();
 
     var model = this.getModelCtor();
     var id = this.getModelId();
 
-    model.findById(id, function(err, inst) {
-      if (err) return cb(err);
+    if (ctx && ctx.instance) {
+      prepareInst(ctx.instance);
+    } else {
+      model.findById(id, function(err, inst) {
+        if (err) {
+          return cb(err);
+        }
+        prepareInst(inst);
+      });
+    }
 
+    return cb.promise;
+
+    function prepareInst(inst) {
+      var currentTenant = change.tenant;
       change.tenant = getTenant(model, inst);
 
       change.currentRevision(inst, function(err, rev) {
-        if (err) return cb(err);
+        if (err) {
+          return cb(err);
+        }
+
+        // If the tenant is different then ensure that change is updated
+        if (change.tenant !== currentTenant) {
+          currentRev = -1;
+        }
 
         // avoid setting rev and prev to the same value
         if (currentRev === rev) {
@@ -213,8 +337,7 @@ module.exports = function(Change) {
           }
         );
       });
-    });
-    return cb.promise;
+    }
 
     function getTenant(model, inst) {
       var tenant = null;
@@ -261,7 +384,7 @@ module.exports = function(Change) {
         }
       }
 
-      if (change.checkpoint != checkpoint) {
+      if (change.checkpoint !== checkpoint) {
         debug('update checkpoint to', checkpoint);
         change.checkpoint = checkpoint;
       }
@@ -745,10 +868,18 @@ module.exports = function(Change) {
   /**
    * Resolve the conflict using the instance data in the target model.
    *
-   * @callback {Function} callback
-   * @param {Error} err
+   * @param {Object} [options] An optional options object to pass to underlying data-access calls.
+   * @param {Function} cb Callback function.
    */
-  Conflict.prototype.resolveUsingTarget = function(cb) {
+  Conflict.prototype.resolveUsingTarget = function(options, cb) {
+
+    if (typeof options === 'function') {
+      cb = options;
+      options = {};
+    }
+
+    options = options || {};
+
     var conflict = this;
 
     conflict.models(function(err, source, target) {
@@ -759,7 +890,7 @@ module.exports = function(Change) {
       var inst = new conflict.SourceModel(
         target.toObject(),
         { persisted: true });
-      inst.save(done);
+      inst.save(options, done);
     });
 
     function done(err) {
@@ -790,12 +921,25 @@ module.exports = function(Change) {
    *
    * @param {Object} data The set of changes to apply on the model
    * instance. Use `null` value to delete the source instance instead.
-   * @callback {Function} callback
-   * @param {Error} err
+   * @param {Object} [options] An optional options object to pass to underlying data-access calls.
+   * @param {Function} cb Callback function.
    */
 
-  Conflict.prototype.resolveManually = function(data, cb) {
+  Conflict.prototype.resolveManually = function(data, options, cb) {
     var conflict = this;
+
+    var lastArg = arguments[arguments.length - 1];
+
+    if (typeof lastArg === 'function' && arguments.length > 1) {
+      cb = lastArg;
+    }
+
+    if (typeof options === 'function') {
+      options = {};
+    }
+
+    options = options || {};
+
     if (!data) {
       return conflict.SourceModel.deleteById(conflict.modelId, done);
     }
@@ -804,7 +948,7 @@ module.exports = function(Change) {
       if (err) return done(err);
       var inst = source || new conflict.SourceModel(target);
       inst.setAttributes(data);
-      inst.save(function(err) {
+      inst.save(options, function(err) {
         if (err) return done(err);
         conflict.resolve(done);
       });
